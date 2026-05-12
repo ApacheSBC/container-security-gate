@@ -67,6 +67,14 @@ jobs:
           path: results/report-${{ matrix.label }}.json
 
       - name: Enforce gate result
+        if: matrix.label == 'vulnerable'
+        run: |
+          if [ "${{ steps.gate.outcome }}" == "failure" ]; then
+            echo "::notice::Security policy gate correctly FAILED for ${{ matrix.image }} (expected)"
+          fi
+
+      - name: Enforce gate result (clean)
+        if: matrix.label == 'clean'
         run: |
           if [ "${{ steps.gate.outcome }}" == "failure" ]; then
             echo "::error::Security policy gate FAILED for ${{ matrix.image }}"
