@@ -1,0 +1,71 @@
+name: Container Security Policy Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  security-gate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: python:3.6-slim
+            label: vulnerable
+            flags: ""
+          - image: python:3.13-slim
+            label: clean
+            flags: "--max-critical 5 --allow-high"
+
+    name: Scan (${{ matrix.label }})
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Trivy
+        run: |
+          sudo apt-get install -y wget apt-transport-https gnupg
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb generic main" \
+            | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update && sudo apt-get install -y trivy
+
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+
+      - name: Pull image
+        run: docker pull ${{ matrix.image }}
+
+      - name: Run Security Policy Gate
+        id: gate
+        run: |
+          mkdir -p results
+          python scripts/policy_gate.py ${{ matrix.image }} ${{ matrix.flags }} \
+            --output-json results/report-${{ matrix.label }}.json
+        continue-on-error: true
+
+      - name: Upload scan report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-report-${{ matrix.label }}
+          path: results/report-${{ matrix.label }}.json
+
+      - name: Enforce gate result
+        run: |
+          if [ "${{ steps.gate.outcome }}" == "failure" ]; then
+            echo "::error::Security policy gate FAILED for ${{ matrix.image }}"
+            exit 1
+          fi
