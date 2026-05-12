@@ -16,10 +16,12 @@ jobs:
         include:
           - image: python:3.6-slim
             label: vulnerable
-            flags: ""
+            max_critical: 0
+            allow_high: ""
           - image: python:3.13-slim
             label: clean
-            flags: "--max-critical 5 --allow-high"
+            max_critical: 5
+            allow_high: "--allow-high"
 
     name: Scan (${{ matrix.label }})
 
@@ -52,7 +54,8 @@ jobs:
         id: gate
         run: |
           mkdir -p results
-          python scripts/policy_gate.py ${{ matrix.image }} ${{ matrix.flags }} \
+          python scripts/policy_gate.py ${{ matrix.image }} \
+            --max-critical ${{ matrix.max_critical }} ${{ matrix.allow_high }} \
             --output-json results/report-${{ matrix.label }}.json
         continue-on-error: true
 
